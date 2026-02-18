@@ -23,8 +23,8 @@ export default class EphemeralOverlayPlugin extends Plugin {
 		this.addCommand({
 			id: 'toggle-drawing-overlay',
 			name: 'Toggle Drawing Overlay',
-			callback: () => this.toggleOverlay(),
-			hotkeys: [{ modifiers: ['Ctrl', 'Shift'], key: 'D' }]
+			callback: () => this.toggleOverlay()
+			// hotkeys: [{ modifiers: ['Ctrl', 'Shift'], key: 'D' }]
 		});
 
 		this.registerEvent(
