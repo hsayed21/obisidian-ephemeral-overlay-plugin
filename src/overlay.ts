@@ -2,7 +2,6 @@ import { App, MarkdownView, Platform } from 'obsidian';
 import { DrawingColor, DrawingState, FadeMode, Stroke } from './types';
 import { MobileToolbar } from './toolbar';
 import { PluginSettings } from './settings';
-import { ContentFreezer } from './content-freezer';
 import { PointerTracker } from './pointer-tracker';
 import { CanvasRenderer } from './canvas-renderer';
 import { FadeAnimator } from './fade-animator';
@@ -19,6 +18,7 @@ export class DrawingOverlay {
 	private app: App;
 	private markdownView: MarkdownView;
 	private settings: PluginSettings;
+	private readonly penOnlyMode: boolean;
 	private overlayEl: HTMLElement;
 	private canvas: HTMLCanvasElement;
 	private state: DrawingState;
@@ -29,7 +29,6 @@ export class DrawingOverlay {
 	private statusBarItem: HTMLElement | null = null;
 	private pendingResize: boolean = false;
 	
-	private contentFreezer: ContentFreezer;
 	private pointerTracker: PointerTracker;
 	private renderer: CanvasRenderer;
 	private fadeAnimator: FadeAnimator;
@@ -39,8 +38,11 @@ export class DrawingOverlay {
 		pointerMove: (e: PointerEvent) => void;
 		pointerUp: (e: PointerEvent) => void;
 		pointerCancel: (e: PointerEvent) => void;
+		touchStart: (e: TouchEvent) => void;
+		touchMove: (e: TouchEvent) => void;
 		keyDown: (e: KeyboardEvent) => void;
 		resize: () => void;
+		scroll: () => void;
 		wheel: (e: WheelEvent) => void;
 		mouseMove: (e: MouseEvent) => void;
 		contextMenu: (e: Event) => void;
@@ -57,6 +59,7 @@ export class DrawingOverlay {
 		this.app = app;
 		this.markdownView = markdownView;
 		this.settings = settings;
+		this.penOnlyMode = settings.penOnlyMode;
 		this.statusBarItem = statusBarItem;
 		
 		this.state = {
@@ -68,12 +71,7 @@ export class DrawingOverlay {
 			fadeMode: DEFAULT_FADE_MODE
 		};
 
-		this.contentFreezer = new ContentFreezer();
 		this.pointerTracker = new PointerTracker();
-
-		if (!this.settings.penOnlyMode) {
-			this.contentFreezer.freeze(this.markdownView.contentEl);
-		}
 
 		this.createOverlay();
 		this.renderer = new CanvasRenderer(this.canvas);
@@ -95,12 +93,15 @@ export class DrawingOverlay {
 			pointerMove: this.handlePointerMove.bind(this),
 			pointerUp: this.handlePointerUp.bind(this),
 			pointerCancel: this.handlePointerCancel.bind(this),
+			touchStart: this.handleTouchGesture.bind(this),
+			touchMove: this.handleTouchGesture.bind(this),
 			keyDown: this.handleKeyDown.bind(this, onExit),
 			resize: this.handleResize.bind(this),
+			scroll: this.handleScroll.bind(this),
 			wheel: this.handleWheel.bind(this),
 			mouseMove: this.handleMouseMove.bind(this),
-			contextMenu: (e) => { e.preventDefault(); e.stopPropagation(); },
-			selectStart: (e) => { e.preventDefault(); e.stopPropagation(); }
+			contextMenu: (e) => this.blockNativeInteraction(e),
+			selectStart: (e) => this.blockNativeInteraction(e)
 		};
 
 		this.attachListeners();
@@ -121,17 +122,7 @@ export class DrawingOverlay {
 	private createOverlay(): void {
 		const contentEl = this.markdownView.contentEl;
 		this.overlayEl = contentEl.createDiv({ cls: 'ephemeral-overlay' });
-
-		if (this.settings.penOnlyMode) {
-			this.overlayEl.addClass('pen-only-mode');
-			this.overlayEl.addClass('ephemeral-pointer-events-none');
-		}
-
 		this.canvas = this.overlayEl.createEl('canvas', { cls: 'ephemeral-overlay-canvas' });
-
-		if (this.settings.penOnlyMode) {
-			this.canvas.addClass('ephemeral-pointer-events-none');
-		}
 	}
 
 	private createMobileToolbar(onExit: () => void): void {
@@ -156,91 +147,78 @@ export class DrawingOverlay {
 		this.app.workspace.on('layout-change', this.layoutChangeRef);
 	}
 
-	private enableCanvasForDrawing(): void {
-		if (!this.settings.penOnlyMode) return;
-
-		this.canvas.removeClass('ephemeral-pointer-events-none');
-		this.canvas.addClass('ephemeral-pointer-events-auto');
-		this.overlayEl.removeClass('ephemeral-pointer-events-none');
-		this.overlayEl.addClass('ephemeral-pointer-events-auto');
-		this.contentFreezer.freeze(this.markdownView.contentEl);
-	}
-
-	private disableCanvasForDrawing(): void {
-		if (!this.settings.penOnlyMode) return;
-
-		if (this.settings.clearOnScroll) {
-			this.clearCanvas();
-		}
-
-		this.canvas.removeClass('ephemeral-pointer-events-auto');
-		this.canvas.addClass('ephemeral-pointer-events-none');
-		this.overlayEl.removeClass('ephemeral-pointer-events-auto');
-		this.overlayEl.addClass('ephemeral-pointer-events-none');
-		this.contentFreezer.unfreeze(this.markdownView.contentEl);
-	}
-
 	private attachListeners(): void {
-		this.overlayEl.addEventListener('contextmenu', this.boundHandlers.contextMenu);
-		this.overlayEl.addEventListener('selectstart', this.boundHandlers.selectStart);
-		this.canvas.addEventListener('contextmenu', this.boundHandlers.contextMenu);
-		this.canvas.addEventListener('selectstart', this.boundHandlers.selectStart);
+		const contentEl = this.markdownView.contentEl;
+		const viewEl = this.markdownView.containerEl;
 
-		const target = this.settings.penOnlyMode ? this.markdownView.contentEl : this.canvas;
-		const options = this.settings.penOnlyMode ? { capture: true } : undefined;
-		target.addEventListener('pointerdown', this.boundHandlers.pointerDown, options);
+		contentEl.addEventListener('pointerdown', this.boundHandlers.pointerDown, {
+			capture: true,
+			passive: false
+		});
+		contentEl.addEventListener('contextmenu', this.boundHandlers.contextMenu, true);
+		contentEl.addEventListener('selectstart', this.boundHandlers.selectStart, true);
+		if (Platform.isMobile) {
+			contentEl.addEventListener('touchstart', this.boundHandlers.touchStart, {
+				capture: true,
+				passive: false
+			});
+			contentEl.addEventListener('touchmove', this.boundHandlers.touchMove, {
+				capture: true,
+				passive: false
+			});
+		}
+		viewEl.addEventListener('scroll', this.boundHandlers.scroll, {
+			capture: true,
+			passive: true
+		});
+		viewEl.addEventListener('wheel', this.boundHandlers.wheel, {
+			capture: true,
+			passive: false
+		});
 		
-		document.addEventListener('pointermove', this.boundHandlers.pointerMove, { passive: false });
-		document.addEventListener('pointerup', this.boundHandlers.pointerUp, { passive: false });
-		document.addEventListener('pointercancel', this.boundHandlers.pointerCancel, { passive: false });
+		document.addEventListener('pointermove', this.boundHandlers.pointerMove, {
+			capture: true,
+			passive: false
+		});
+		document.addEventListener('pointerup', this.boundHandlers.pointerUp, true);
+		document.addEventListener('pointercancel', this.boundHandlers.pointerCancel, true);
 
 		if (!Platform.isMobile) {
 			document.addEventListener('keydown', this.boundHandlers.keyDown);
-			this.canvas.addEventListener('wheel', this.boundHandlers.wheel, { passive: false });
-			this.canvas.addEventListener('mousemove', this.boundHandlers.mouseMove);
+			contentEl.addEventListener('mousemove', this.boundHandlers.mouseMove);
 		}
 
 		window.addEventListener('resize', this.boundHandlers.resize);
 	}
 
 	private detachListeners(): void {
-		this.overlayEl.removeEventListener('contextmenu', this.boundHandlers.contextMenu);
-		this.overlayEl.removeEventListener('selectstart', this.boundHandlers.selectStart);
-		this.canvas.removeEventListener('contextmenu', this.boundHandlers.contextMenu);
-		this.canvas.removeEventListener('selectstart', this.boundHandlers.selectStart);
+		const contentEl = this.markdownView.contentEl;
+		const viewEl = this.markdownView.containerEl;
+
+		contentEl.removeEventListener('pointerdown', this.boundHandlers.pointerDown, true);
+		contentEl.removeEventListener('contextmenu', this.boundHandlers.contextMenu, true);
+		contentEl.removeEventListener('selectstart', this.boundHandlers.selectStart, true);
+		if (Platform.isMobile) {
+			contentEl.removeEventListener('touchstart', this.boundHandlers.touchStart, true);
+			contentEl.removeEventListener('touchmove', this.boundHandlers.touchMove, true);
+		}
+		viewEl.removeEventListener('scroll', this.boundHandlers.scroll, true);
+		viewEl.removeEventListener('wheel', this.boundHandlers.wheel, true);
 		
-		const target = this.settings.penOnlyMode ? this.markdownView.contentEl : this.canvas;
-		const options: AddEventListenerOptions | undefined = this.settings.penOnlyMode ? { capture: true } : undefined;
-		target.removeEventListener('pointerdown', this.boundHandlers.pointerDown, options);
-		
-		document.removeEventListener('pointermove', this.boundHandlers.pointerMove);
-		document.removeEventListener('pointerup', this.boundHandlers.pointerUp);
-		document.removeEventListener('pointercancel', this.boundHandlers.pointerCancel);
+		document.removeEventListener('pointermove', this.boundHandlers.pointerMove, true);
+		document.removeEventListener('pointerup', this.boundHandlers.pointerUp, true);
+		document.removeEventListener('pointercancel', this.boundHandlers.pointerCancel, true);
 		
 		if (!Platform.isMobile) {
 			document.removeEventListener('keydown', this.boundHandlers.keyDown);
-			this.canvas.removeEventListener('wheel', this.boundHandlers.wheel);
-			this.canvas.removeEventListener('mousemove', this.boundHandlers.mouseMove);
+			contentEl.removeEventListener('mousemove', this.boundHandlers.mouseMove);
 		}
 		
 		window.removeEventListener('resize', this.boundHandlers.resize);
 	}
 
 	private handlePointerDown(e: PointerEvent): void {
-		if (this.settings.penOnlyMode) {
-			if (e.pointerType === 'touch') {
-				this.pointerTracker.startFingerTracking(e.clientX, e.clientY, e.pointerId);
-				return;
-			}
-			if (e.pointerType === 'pen') {
-				this.pointerTracker.setActivePen(e.pointerId);
-				this.enableCanvasForDrawing();
-			}
-		}
-
-		if (this.state.isDrawing && this.pointerTracker.isPointerActive() && !this.pointerTracker.isActivePointer(e.pointerId)) {
-			return;
-		}
+		if (!this.shouldDraw(e) || this.pointerTracker.isPointerActive()) return;
 
 		e.preventDefault();
 		e.stopPropagation();
@@ -254,22 +232,35 @@ export class DrawingOverlay {
 			this.cursorEl.addClass('ephemeral-display-none');
 		}
 
-		this.canvas.setPointerCapture(e.pointerId);
+		this.capturePointer(e.pointerId);
+	}
+
+	private handleTouchGesture(e: TouchEvent): void {
+		if (this.isToolbarEvent(e)) return;
+
+		const hasStylusTouch = this.hasStylusTouch(e.changedTouches);
+		if (this.penOnlyMode && !hasStylusTouch) {
+			if (e.type === 'touchmove' && this.settings.clearOnScroll) {
+				this.clearCanvas();
+			}
+			return;
+		}
+
+		if (e.cancelable) {
+			e.preventDefault();
+		}
+		e.stopPropagation();
+	}
+
+	private hasStylusTouch(touches: TouchList): boolean {
+		for (let index = 0; index < touches.length; index++) {
+			if (touches[index]?.touchType === 'stylus') return true;
+		}
+		return false;
 	}
 
 	private handlePointerMove(e: PointerEvent): void {
-		if (this.settings.penOnlyMode && e.pointerType === 'touch') {
-			if (this.pointerTracker.isScrollGesture(e.clientX, e.clientY, e.pointerId)) {
-				this.pointerTracker.clearFingerTracking();
-				this.disableCanvasForDrawing();
-				return;
-			}
-		}
-		
-		if (!this.state.isDrawing) return;
-		if (this.pointerTracker.isPointerActive() && !this.pointerTracker.isActivePointer(e.pointerId)) {
-			return;
-		}
+		if (!this.state.isDrawing || !this.pointerTracker.isActivePointer(e.pointerId)) return;
 
 		e.preventDefault();
 		e.stopPropagation();
@@ -292,18 +283,7 @@ export class DrawingOverlay {
 	}
 
 	private handlePointerUp(e: PointerEvent): void {
-		if (this.settings.penOnlyMode && e.pointerType === 'touch') {
-			if (this.pointerTracker.getFingerTrackingId() === e.pointerId) {
-				this.pointerTracker.clearFingerTracking();
-				return;
-			}
-		}
-		
-		if (this.pointerTracker.isPointerActive() && !this.pointerTracker.isActivePointer(e.pointerId)) {
-			return;
-		}
-
-		if (!this.state.isDrawing) return;
+		if (!this.state.isDrawing || !this.pointerTracker.isActivePointer(e.pointerId)) return;
 
 		e.preventDefault();
 		e.stopPropagation();
@@ -313,11 +293,7 @@ export class DrawingOverlay {
 	}
 
 	private handlePointerCancel(e: PointerEvent): void {
-		if (this.pointerTracker.isPointerActive() && !this.pointerTracker.isActivePointer(e.pointerId)) {
-			return;
-		}
-
-		if (!this.state.isDrawing) return;
+		if (!this.state.isDrawing || !this.pointerTracker.isActivePointer(e.pointerId)) return;
 
 		this.saveStroke();
 		this.cleanupPointer(e);
@@ -339,22 +315,44 @@ export class DrawingOverlay {
 		this.state.currentStroke = [];
 		this.state.isDrawing = false;
 		this.pointerTracker.clearActivePointer();
-		
-		if (e.pointerType === 'pen') {
-			this.pointerTracker.clearActivePen();
-		}
 
 		if (this.cursorEl) {
 			this.cursorEl.removeClass('ephemeral-display-none');
 		}
 
-		if (this.canvas.hasPointerCapture(e.pointerId)) {
-			this.canvas.releasePointerCapture(e.pointerId);
+		const contentEl = this.markdownView.contentEl;
+		if (contentEl.hasPointerCapture(e.pointerId)) {
+			contentEl.releasePointerCapture(e.pointerId);
 		}
 
 		if (this.pendingResize) {
 			this.performResize();
 		}
+	}
+
+	private shouldDraw(e: PointerEvent): boolean {
+		if (e.button !== 0 || this.isToolbarEvent(e)) return false;
+		return !this.penOnlyMode || e.pointerType === 'pen';
+	}
+
+	private capturePointer(pointerId: number): void {
+		try {
+			this.markdownView.contentEl.setPointerCapture(pointerId);
+		} catch {
+			// WebKit may already own implicit capture; document listeners still track the stroke.
+		}
+	}
+
+	private isToolbarEvent(e: Event): boolean {
+		return e.target instanceof Element && e.target.closest('.ephemeral-toolbar') !== null;
+	}
+
+	private blockNativeInteraction(e: Event): void {
+		const isPenEvent = e instanceof PointerEvent && e.pointerType === 'pen';
+		if (this.penOnlyMode && !this.state.isDrawing && !isPenEvent) return;
+
+		e.preventDefault();
+		e.stopPropagation();
 	}
 
 	private handleKeyDown(onExit: () => void, e: KeyboardEvent): void {
@@ -394,6 +392,17 @@ export class DrawingOverlay {
 		if (e.ctrlKey) {
 			e.preventDefault();
 			this.adjustWidth(e.deltaY < 0 ? 1 : -1);
+			return;
+		}
+
+		if (this.settings.clearOnScroll) {
+			this.clearCanvas();
+		}
+	}
+
+	private handleScroll(): void {
+		if (this.settings.clearOnScroll) {
+			this.clearCanvas();
 		}
 	}
 
@@ -479,7 +488,7 @@ export class DrawingOverlay {
 	}
 
 	private createCustomCursor(): void {
-		this.canvas.addClass('ephemeral-cursor-none');
+		this.markdownView.contentEl.addClass('ephemeral-cursor-none');
 		this.cursorEl = document.body.createDiv({ cls: 'ephemeral-cursor' });
 		this.updateCustomCursor();
 	}
@@ -501,9 +510,9 @@ export class DrawingOverlay {
 	}
 
 	destroy(): void {
-		this.contentFreezer.unfreeze(this.markdownView.contentEl);
 		this.fadeAnimator.stop();
 		this.detachListeners();
+		this.markdownView.contentEl.removeClass('ephemeral-cursor-none');
 
 		if (this.resizeObserver) {
 			this.resizeObserver.disconnect();

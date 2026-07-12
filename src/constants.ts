@@ -1,7 +1,5 @@
 import { DrawingColor, FadeMode } from './types';
 
-export const SCROLL_THRESHOLD = 20;
-
 export const DEFAULT_STROKE_WIDTH = 4;
 export const DEFAULT_COLOR: DrawingColor = 'red';
 export const DEFAULT_FADE_MODE: FadeMode = 'off';

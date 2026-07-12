@@ -39,11 +39,19 @@ export default class EphemeralOverlayPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const savedSettings = await this.loadData() as Partial<PluginSettings> | null;
+		this.settings = { ...DEFAULT_SETTINGS, ...savedSettings };
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	refreshOverlay() {
+		if (!this.overlay) return;
+
+		this.disableOverlay();
+		this.enableOverlay();
 	}
 
 	onunload() {
