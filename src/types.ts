@@ -18,6 +18,8 @@ export type FadeMode = 'off' | 'fading' | 'medium' | 'long' | 'verylong';
 export interface Point {
 	x: number;
 	y: number;
+	/** Normalized width multiplier derived from pen pressure. */
+	pressure: number;
 }
 
 /**

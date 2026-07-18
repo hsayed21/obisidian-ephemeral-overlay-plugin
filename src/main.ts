@@ -1,16 +1,14 @@
 import { MarkdownView, Plugin } from 'obsidian';
-import { DrawingOverlay } from './overlay';
-import { DEFAULT_SETTINGS, EphemeralOverlaySettingTab, PluginSettings } from './settings';
-
-interface MarkdownViewWithActions extends MarkdownView {
-	addAction(icon: string, title: string, callback: (evt: MouseEvent) => void): HTMLElement;
-}
+import { DrawingOverlay, type ToolPreferenceChange } from './overlay';
+import { EphemeralOverlaySettingTab } from './settings';
+import { normalizeSettings, type PluginSettings, type ToolbarPosition } from './settings-model';
 
 export default class EphemeralOverlayPlugin extends Plugin {
-	settings: PluginSettings;
+	settings: PluginSettings = normalizeSettings(null);
 	private overlay: DrawingOverlay | null = null;
 	private ribbonIconEl: HTMLElement | null = null;
 	private statusBarItem: HTMLElement | null = null;
+	private saveQueue: Promise<void> = Promise.resolve();
 
 	async onload() {
 		await this.loadSettings();
@@ -27,24 +25,25 @@ export default class EphemeralOverlayPlugin extends Plugin {
 		this.addCommand({
 			id: 'toggle-drawing-overlay',
 			name: 'Toggle drawing overlay',
-			callback: () => this.toggleOverlay()
-			// hotkeys: [{ modifiers: ['Ctrl', 'Shift'], key: 'D' }]
+			callback: () => this.toggleOverlay(),
 		});
 
 		this.registerEvent(
-			this.app.workspace.on('active-leaf-change', () => this.updateViewActionButton())
+			this.app.workspace.on('active-leaf-change', () => this.handleActiveLeafChange())
 		);
 
 		this.updateViewActionButton();
 	}
 
 	async loadSettings() {
-		const savedSettings = await this.loadData() as Partial<PluginSettings> | null;
-		this.settings = { ...DEFAULT_SETTINGS, ...savedSettings };
+		this.settings = normalizeSettings(await this.loadData());
 	}
 
-	async saveSettings() {
-		await this.saveData(this.settings);
+	saveSettings(): Promise<void> {
+		this.saveQueue = this.saveQueue
+			.catch(() => undefined)
+			.then(() => this.saveData(this.settings));
+		return this.saveQueue;
 	}
 
 	refreshOverlay() {
@@ -55,10 +54,7 @@ export default class EphemeralOverlayPlugin extends Plugin {
 	}
 
 	onunload() {
-		if (this.overlay) {
-			this.overlay.destroy();
-			this.overlay = null;
-		}
+		this.disableOverlay();
 	}
 
 	private toggleOverlay() {
@@ -73,13 +69,18 @@ export default class EphemeralOverlayPlugin extends Plugin {
 		const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (!markdownView) return;
 
-		this.overlay = new DrawingOverlay(
-			this.app,
+		this.overlay = new DrawingOverlay({
+			app: this.app,
 			markdownView,
-			this.settings,
-			this.statusBarItem,
-			() => this.disableOverlay()
-		);
+			settings: this.settings,
+			statusBarItem: this.statusBarItem,
+			callbacks: {
+				onExit: () => this.disableOverlay(),
+				onToolChange: change => this.rememberTool(change),
+				onToolbarPositionChange: position => this.rememberToolbarPosition(position),
+				onToolbarCollapsedChange: collapsed => this.rememberToolbarCollapsed(collapsed),
+			},
+		});
 
 		this.ribbonIconEl?.addClass('is-active');
 		this.statusBarItem?.show();
@@ -104,6 +105,30 @@ export default class EphemeralOverlayPlugin extends Plugin {
 			return;
 		}
 
-		(markdownView as MarkdownViewWithActions).addAction('pen-tool', 'Toggle drawing', () => this.toggleOverlay());
+		markdownView.addAction('pen-tool', 'Toggle drawing', () => this.toggleOverlay());
+	}
+
+	private handleActiveLeafChange(): void {
+		if (this.overlay) this.disableOverlay();
+		this.updateViewActionButton();
+	}
+
+	private rememberTool(change: ToolPreferenceChange): void {
+		if (!this.settings.rememberLastTool) return;
+
+		if (change.color) this.settings.lastColor = change.color;
+		if (change.width !== undefined) this.settings.lastStrokeWidth = change.width;
+		if (change.fadeMode) this.settings.lastFadeMode = change.fadeMode;
+		void this.saveSettings();
+	}
+
+	private rememberToolbarPosition(position: ToolbarPosition): void {
+		this.settings.toolbarPosition = position;
+		void this.saveSettings();
+	}
+
+	private rememberToolbarCollapsed(collapsed: boolean): void {
+		this.settings.toolbarCollapsed = collapsed;
+		void this.saveSettings();
 	}
 }

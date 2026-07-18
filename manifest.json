@@ -1,8 +1,8 @@
 {
 	"id": "ephemeral-overlay",
 	"name": "Ephemeral Overlay",
-	"version": "1.0.0",
-	"minAppVersion": "0.15.0",
+	"version": "1.1.0",
+	"minAppVersion": "1.1.0",
 	"description": "Temporary drawing overlay for freehand annotations with mouse, touch, or Apple Pencil. Like ZoomIt or Epic Pen - nothing saved to disk.",
 	"author": "hsayed",
 	"authorUrl": "https://github.com/hsayed21",

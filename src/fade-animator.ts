@@ -4,19 +4,22 @@ import { CanvasRenderer } from './canvas-renderer';
 
 export class FadeAnimator {
 	private animationId: number | null = null;
+	private activeMode: FadeMode = 'off';
 
 	constructor(
 		private renderer: CanvasRenderer,
 		private getStrokes: () => Stroke[],
 		private setStrokes: (strokes: Stroke[]) => void,
 		private getCurrentStroke: () => { points: Point[]; color: DrawingColor; width: number },
-		private isDrawing: () => boolean
+		private isDrawing: () => boolean,
+		private ownerWindow: Window,
 	) {}
 
 	start(fadeMode: FadeMode): void {
-		if (this.animationId !== null || fadeMode === 'off') {
-			return;
-		}
+		if (fadeMode === 'off') return;
+		if (this.animationId !== null && this.activeMode === fadeMode) return;
+		this.stop();
+		this.activeMode = fadeMode;
 
 		const animate = () => {
 			const now = Date.now();
@@ -31,20 +34,21 @@ export class FadeAnimator {
 			this.redrawWithFade(now, fadeDuration);
 
 			if (activeStrokes.length > 0) {
-				this.animationId = requestAnimationFrame(animate);
+				this.animationId = this.ownerWindow.requestAnimationFrame(animate);
 			} else {
 				this.animationId = null;
 			}
 		};
 
-		this.animationId = requestAnimationFrame(animate);
+		this.animationId = this.ownerWindow.requestAnimationFrame(animate);
 	}
 
 	stop(): void {
 		if (this.animationId !== null) {
-			cancelAnimationFrame(this.animationId);
+			this.ownerWindow.cancelAnimationFrame(this.animationId);
 			this.animationId = null;
 		}
+		this.activeMode = 'off';
 	}
 
 	private redrawWithFade(now: number, fadeDuration: number): void {

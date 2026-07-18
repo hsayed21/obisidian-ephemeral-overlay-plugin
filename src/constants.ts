@@ -7,16 +7,6 @@ export const DEFAULT_FADE_MODE: FadeMode = 'off';
 export const MIN_STROKE_WIDTH = 1;
 export const MAX_STROKE_WIDTH = 32;
 
-export const INTERACTIVE_SELECTORS = [
-	'.cm-editor',
-	'.cm-content',
-	'.cm-line',
-	'.markdown-preview-view',
-	'.markdown-reading-view',
-	'.view-content',
-	'[contenteditable]',
-];
-
 export const COLOR_MAP: Record<DrawingColor, string> = {
 	red: '#ff0000',
 	yellow: '#ffff00',
@@ -54,7 +44,3 @@ export const COLOR_BUTTONS: Array<{ label: string; color: DrawingColor; hex: str
 	{ label: 'O', color: 'orange', hex: COLOR_MAP.orange },
 	{ label: 'P', color: 'pink', hex: COLOR_MAP.pink },
 ];
-
-
-export const FROZEN_CLASS = 'ephemeral-frozen';
-

@@ -1,280 +1,284 @@
-/*
- * EphemeralOverlay Plugin Styles
- *
- * Styles for the drawing overlay, canvas, and mobile toolbar
- */
-
-/* Utility classes for dynamic state changes */
-.ephemeral-pointer-events-none {
-	pointer-events: none;
-}
-
-.ephemeral-pointer-events-auto {
-	pointer-events: auto;
-}
-
+/* Ephemeral Overlay drawing surface */
 .ephemeral-display-none {
-	display: none;
-}
-
-.ephemeral-display-block {
-	display: block;
+	display: none !important;
 }
 
 .ephemeral-cursor-none {
 	cursor: none;
 }
 
-/* Frozen content state - applied to prevent interactions */
-.ephemeral-frozen {
-	pointer-events: none;
-	user-select: none;
-	-webkit-touch-callout: none;
-}
-
-/* Visual overlay; note input remains targeted at Obsidian underneath it. */
 .ephemeral-overlay {
 	position: absolute;
 	inset: 0;
 	z-index: 50;
 	pointer-events: none;
-	user-select: none; /* Prevent text selection */
-	-webkit-user-select: none; /* Safari/iOS */
-	-moz-user-select: none; /* Firefox */
-	-ms-user-select: none; /* IE/Edge */
+	user-select: none;
+	-webkit-user-select: none;
 	touch-action: auto;
-	-webkit-touch-callout: none; /* Prevent iOS callout menu */
+	-webkit-touch-callout: none;
 }
 
-/* Drawing surface is rendered above the note without becoming an input target. */
 .ephemeral-overlay-canvas {
+	display: block;
 	width: 100%;
 	height: 100%;
-	touch-action: auto;
-	cursor: crosshair;
-	user-select: none; /* Prevent text selection */
-	-webkit-user-select: none; /* Safari/iOS */
 	pointer-events: none;
-	/* Performance optimizations for iPad/Apple Pencil */
-	will-change: transform; /* GPU acceleration hint */
+	touch-action: auto;
 }
 
-/* Mobile toolbar - centered at bottom with safe area support */
+/* Compact iPad toolbar. The canvas remains input-transparent around it. */
 .ephemeral-toolbar {
 	position: absolute;
-	bottom: calc(env(safe-area-inset-bottom) + 16px);
 	left: 50%;
-	transform: translateX(-50%);
-	display: flex;
-	gap: 12px;
-	padding: 10px 14px;
-	background: rgba(30, 30, 30, 0.9);
-	border-radius: 12px;
-	backdrop-filter: blur(10px);
+	bottom: calc(env(safe-area-inset-bottom) + 14px);
 	z-index: 100;
-	align-items: center;
+	max-width: calc(100% - 16px);
+	transform: translateX(-50%);
 	pointer-events: auto;
+	touch-action: none;
+}
+
+.ephemeral-toolbar.is-positioned {
+	left: var(--ephemeral-toolbar-x);
+	top: var(--ephemeral-toolbar-y);
+	bottom: auto;
+	transform: translate(-50%, -50%);
+}
+
+.ephemeral-toolbar.is-dragging {
+	opacity: 0.88;
+	will-change: left, top;
+}
+
+.ephemeral-toolbar-panel {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	box-sizing: border-box;
+	width: max-content;
+	max-width: 100%;
+	padding: 6px;
+	overflow-x: auto;
+	overflow-y: hidden;
+	background: var(--background-primary);
+	background: color-mix(in srgb, var(--background-primary) 90%, transparent);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 14px;
+	box-shadow: 0 6px 24px rgba(0, 0, 0, 0.24);
+	backdrop-filter: blur(18px);
+	-webkit-backdrop-filter: blur(18px);
+	scrollbar-width: none;
+	overscroll-behavior: contain;
+}
+
+.ephemeral-toolbar-panel::-webkit-scrollbar {
+	display: none;
+}
+
+.ephemeral-toolbar.is-vertical .ephemeral-toolbar-panel {
+	flex-direction: column;
+	width: auto;
+	max-width: none;
+	max-height: var(--ephemeral-toolbar-max-height);
+	overflow-x: hidden;
+	overflow-y: auto;
+}
+
+.ephemeral-toolbar.is-vertical .ephemeral-toolbar-group {
+	flex-direction: column;
+}
+
+.ephemeral-toolbar.is-vertical .ephemeral-toolbar-group + .ephemeral-toolbar-group {
+	padding-top: 5px;
+	padding-left: 0;
+	border-top: 1px solid var(--background-modifier-border);
+	border-left: none;
+}
+
+.ephemeral-toolbar-group {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	flex: 0 0 auto;
+}
+
+.ephemeral-toolbar-group + .ephemeral-toolbar-group {
+	padding-left: 5px;
+	border-left: 1px solid var(--background-modifier-border);
+}
+
+.ephemeral-toolbar-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	min-width: 40px;
+	height: 40px;
+	margin: 0;
+	padding: 0 8px;
+	color: var(--text-normal);
+	background: transparent;
+	border: 2px solid transparent;
+	border-radius: 10px;
+	box-shadow: none;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
 	touch-action: manipulation;
 }
 
-/* Toolbar button groups */
-.ephemeral-toolbar-group {
-	display: flex;
-	gap: 6px;
-	align-items: center;
-}
-
-/* Toolbar buttons - touch-friendly sizing */
-.ephemeral-toolbar-btn {
-	border: none;
-	padding: 8px 12px;
-	border-radius: 6px;
-	color: black;
-	font-weight: bold;
-	font-size: 14px;
-	cursor: pointer;
-	min-width: 44px; /* Apple's recommended minimum touch target size */
-	min-height: 44px;
-	transition: all 0.2s ease;
-	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.ephemeral-toolbar-btn:hover {
-	opacity: 0.8;
-	transform: translateY(-1px);
-}
-
+.ephemeral-toolbar-btn:hover,
 .ephemeral-toolbar-btn:active {
-	opacity: 0.6;
-	transform: translateY(0);
+	background: var(--background-modifier-hover);
 }
 
-/* Width buttons */
-.ephemeral-width-btn {
-	background: var(--background-modifier-border) !important;
-	color: var(--text-normal) !important;
-	position: relative;
-	border: 2px solid transparent;
-	font-weight: bold;
+.ephemeral-toolbar-btn:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 1px;
 }
 
-/* Width button sizing based on data attribute */
+.ephemeral-toolbar-drag-handle {
+	cursor: grab;
+	touch-action: none;
+}
+
+.ephemeral-toolbar.is-dragging .ephemeral-toolbar-drag-handle {
+	cursor: grabbing;
+}
+
+.ephemeral-width-indicator {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 40px;
+	flex: 0 0 32px;
+}
+
+.ephemeral-width-dot {
+	max-width: 26px;
+	max-height: 26px;
+	background: var(--text-normal);
+	border-radius: 50%;
+}
+
 .ephemeral-width-btn[data-width-size="2"] {
 	font-size: 12px;
 }
 
 .ephemeral-width-btn[data-width-size="4"] {
-	font-size: 16px;
+	font-size: 17px;
 }
 
 .ephemeral-width-btn[data-width-size="8"] {
 	font-size: 24px;
 }
 
-.ephemeral-width-btn.is-active {
+.ephemeral-width-btn.is-active,
+.ephemeral-fade-btn:active {
+	color: var(--interactive-accent);
+	background: var(--background-modifier-hover);
 	border-color: var(--interactive-accent);
-	background: var(--background-modifier-hover) !important;
 }
 
-/* Width indicator (shows current pen width) */
-.ephemeral-width-indicator {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 40px;
-	height: 44px;
-	background: var(--background-modifier-border);
-	border-radius: 6px;
-	padding: 0 8px;
+.ephemeral-color-btn {
+	position: relative;
+	min-width: 36px;
+	width: 36px;
+	padding: 0;
 }
 
-.ephemeral-width-dot {
-	background: var(--text-normal);
+.ephemeral-color-btn::before {
+	width: 22px;
+	height: 22px;
+	background: var(--ephemeral-color);
+	border: 1px solid rgba(128, 128, 128, 0.45);
 	border-radius: 50%;
-	transition: all 0.2s ease;
+	content: '';
 }
 
-/* Dynamic width dot sizing based on data attribute */
-.ephemeral-width-dot[data-width="2"] {
-	width: 4px;
-	height: 4px;
+.ephemeral-color-btn.is-active {
+	border-color: var(--interactive-accent);
 }
 
-.ephemeral-width-dot[data-width="4"] {
-	width: 8px;
-	height: 8px;
+.ephemeral-fade-btn {
+	min-width: 66px;
 }
 
-.ephemeral-width-dot[data-width="8"] {
-	width: 16px;
-	height: 16px;
+.ephemeral-exit-btn {
+	color: var(--text-error);
 }
 
-.ephemeral-width-dot[data-width="12"] {
-	width: 24px;
-	height: 24px;
+.ephemeral-toolbar-collapsed-button {
+	width: 48px;
+	height: 48px;
+	padding: 0;
+	color: var(--text-on-accent);
+	background: var(--interactive-accent);
+	border: 1px solid var(--interactive-accent-hover);
+	border-radius: 50%;
+	box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+	touch-action: none;
+	user-select: none;
+	-webkit-user-select: none;
+	-webkit-touch-callout: none;
+	-webkit-user-drag: none;
 }
 
-.ephemeral-width-dot[data-width="16"] {
-	width: 32px;
-	height: 32px;
+.ephemeral-toolbar-collapsed-button:hover,
+.ephemeral-toolbar-collapsed-button:active {
+	background: var(--interactive-accent-hover);
 }
 
-/* Ribbon icon active state indicator */
+/* Desktop drawing cursor */
+.ephemeral-cursor {
+	position: fixed;
+	z-index: 9999;
+	transform: translate(-50%, -50%);
+	pointer-events: none;
+	background: var(--ephemeral-cursor-color);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 50%;
+	box-shadow: 0 0 3px var(--background-modifier-box-shadow);
+	opacity: 0.72;
+	transition: width 0.1s ease, height 0.1s ease, background-color 0.15s ease;
+}
+
+.ephemeral-cursor-red { --ephemeral-cursor-color: #ff0000; }
+.ephemeral-cursor-yellow { --ephemeral-cursor-color: #ffff00; }
+.ephemeral-cursor-blue { --ephemeral-cursor-color: #0000ff; }
+.ephemeral-cursor-green { --ephemeral-cursor-color: #00ff00; }
+.ephemeral-cursor-orange { --ephemeral-cursor-color: #ff8800; }
+.ephemeral-cursor-pink { --ephemeral-cursor-color: #ff69b4; }
+
 .side-dock-ribbon-action.is-active {
 	color: var(--interactive-accent);
 }
 
-/* Custom cursor - filled circle showing pen width */
-.ephemeral-cursor {
-	position: fixed;
-	border-radius: 50%;
-	pointer-events: none;
-	z-index: 9999;
-	transform: translate(-50%, -50%);
-	opacity: 0.7;
-	transition: width 0.1s ease, height 0.1s ease, background-color 0.2s ease;
-	border: 1px solid var(--background-modifier-border);
-	box-shadow: 0 0 3px var(--background-modifier-box-shadow);
+@media (max-width: 700px) {
+	.ephemeral-toolbar-panel {
+		gap: 3px;
+		padding: 4px;
+		border-radius: 12px;
+	}
+
+	.ephemeral-width-indicator {
+		display: none;
+	}
+
+	.ephemeral-toolbar-btn {
+		min-width: 38px;
+		height: 38px;
+	}
+
+	.ephemeral-color-btn {
+		min-width: 34px;
+		width: 34px;
+	}
 }
 
-/* Cursor colors */
-.ephemeral-cursor-red {
-	background-color: #ff0000;
+@media (prefers-reduced-motion: reduce) {
+	.ephemeral-cursor {
+		transition: none;
+	}
 }
-
-.ephemeral-cursor-yellow {
-	background-color: #ffff00;
-}
-
-.ephemeral-cursor-blue {
-	background-color: #0000ff;
-}
-
-.ephemeral-cursor-green {
-	background-color: #00ff00;
-}
-
-.ephemeral-cursor-orange {
-	background-color: #ff8800;
-}
-
-.ephemeral-cursor-pink {
-	background-color: #ff69b4;
-}
-
-/* Color buttons */
-.ephemeral-color-btn {
-	font-weight: bold;
-}
-
-.ephemeral-color-red {
-	background-color: #ff0000 !important;
-	color: var(--text-on-accent) !important;
-}
-
-.ephemeral-color-yellow {
-	background-color: #ffff00 !important;
-	color: #000 !important;
-}
-
-.ephemeral-color-blue {
-	background-color: #0000ff !important;
-	color: var(--text-on-accent) !important;
-}
-
-.ephemeral-color-green {
-	background-color: #00ff00 !important;
-	color: #000 !important;
-}
-
-.ephemeral-color-orange {
-	background-color: #ff8800 !important;
-	color: var(--text-on-accent) !important;
-}
-
-.ephemeral-color-pink {
-	background-color: #ff69b4 !important;
-	color: var(--text-on-accent) !important;
-}
-
-/* Fade button */
-.ephemeral-fade-btn {
-	background-color: var(--background-modifier-border) !important;
-	color: var(--text-normal) !important;
-	font-size: 11px;
-}
-
-/* Action buttons */
-.ephemeral-action-btn {
-	color: var(--text-on-accent) !important;
-}
-
-.ephemeral-clear-btn {
-	background-color: var(--interactive-normal) !important;
-}
-
-.ephemeral-exit-btn {
-	background-color: var(--background-modifier-hover) !important;
-}
-
